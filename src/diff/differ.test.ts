@@ -1,78 +1,74 @@
-import { describe, it, expect } from 'vitest';
-import { diffEnvFiles } from './differ';
-import { formatDiffText, formatDiffJson } from './formatDiff';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { diffEnvFiles, DiffResult } from './differ';
 
-const base = { API_URL: 'http://old.example.com', SECRET: 'abc123', SHARED: 'same' };
-const compare = { API_URL: 'http://new.example.com', NEW_VAR: 'hello', SHARED: 'same' };
+function writeTempEnv(content: string): string {
+  const filePath = path.join(os.tmpdir(), `envguard-diff-test-${Date.now()}-${Math.random()}.env`);
+  fs.writeFileSync(filePath, content);
+  return filePath;
+}
 
 describe('diffEnvFiles', () => {
-  it('detects added keys', () => {
-    const result = diffEnvFiles(base, compare);
-    const added = result.entries.filter((e) => e.status === 'added');
-    expect(added).toHaveLength(1);
-    expect(added[0].key).toBe('NEW_VAR');
+  afterEach(() => {
+    // cleanup handled by OS tmpdir
   });
 
-  it('detects removed keys', () => {
-    const result = diffEnvFiles(base, compare);
-    const removed = result.entries.filter((e) => e.status === 'removed');
-    expect(removed).toHaveLength(1);
-    expect(removed[0].key).toBe('SECRET');
+  it('detects changed values', () => {
+    const fileA = writeTempEnv('KEY=old_value\nAPP=myapp\n');
+    const fileB = writeTempEnv('KEY=new_value\nAPP=myapp\n');
+    const result = diffEnvFiles(fileA, fileB);
+    const changed = result.find((r) => r.key === 'KEY');
+    expect(changed).toBeDefined();
+    expect(changed?.status).toBe('changed');
+    expect(changed?.valueA).toBe('old_value');
+    expect(changed?.valueB).toBe('new_value');
   });
 
-  it('detects changed keys', () => {
-    const result = diffEnvFiles(base, compare);
-    const changed = result.entries.filter((e) => e.status === 'changed');
-    expect(changed).toHaveLength(1);
-    expect(changed[0].key).toBe('API_URL');
+  it('detects keys missing in file B', () => {
+    const fileA = writeTempEnv('ONLY_IN_A=yes\n');
+    const fileB = writeTempEnv('OTHER=val\n');
+    const result = diffEnvFiles(fileA, fileB);
+    const missing = result.find((r) => r.key === 'ONLY_IN_A');
+    expect(missing?.status).toBe('missing_in_b');
+    expect(missing?.valueA).toBe('yes');
+    expect(missing?.valueB).toBeUndefined();
   });
 
-  it('detects unchanged keys', () => {
-    const result = diffEnvFiles(base, compare);
-    const unchanged = result.entries.filter((e) => e.status === 'unchanged');
-    expect(unchanged).toHaveLength(1);
-    expect(unchanged[0].key).toBe('SHARED');
+  it('detects keys missing in file A', () => {
+    const fileA = writeTempEnv('OTHER=val\n');
+    const fileB = writeTempEnv('ONLY_IN_B=yes\n');
+    const result = diffEnvFiles(fileA, fileB);
+    const added = result.find((r) => r.key === 'ONLY_IN_B');
+    expect(added?.status).toBe('missing_in_a');
+    expect(added?.valueA).toBeUndefined();
+    expect(added?.valueB).toBe('yes');
   });
 
-  it('includes required flag from schema', () => {
-    const schema = { SECRET: { type: 'string' as const, required: true } };
-    const result = diffEnvFiles(base, compare, schema);
-    const secretEntry = result.entries.find((e) => e.key === 'SECRET');
-    expect(secretEntry?.required).toBe(true);
+  it('marks unchanged keys', () => {
+    const fileA = writeTempEnv('SAME=value\n');
+    const fileB = writeTempEnv('SAME=value\n');
+    const result = diffEnvFiles(fileA, fileB);
+    const unchanged = result.find((r) => r.key === 'SAME');
+    expect(unchanged?.status).toBe('unchanged');
   });
 
-  it('returns correct counts', () => {
-    const result = diffEnvFiles(base, compare);
-    expect(result.addedCount).toBe(1);
-    expect(result.removedCount).toBe(1);
-    expect(result.changedCount).toBe(1);
-    expect(result.unchangedCount).toBe(1);
-  });
-});
-
-describe('formatDiffText', () => {
-  it('includes summary header', () => {
-    const result = diffEnvFiles(base, compare);
-    const text = formatDiffText(result);
-    expect(text).toContain('Env Diff Summary');
-    expect(text).toContain('Added:     1');
-    expect(text).toContain('Removed:   1');
+  it('handles empty files', () => {
+    const fileA = writeTempEnv('');
+    const fileB = writeTempEnv('');
+    const result = diffEnvFiles(fileA, fileB);
+    expect(result).toHaveLength(0);
   });
 
-  it('masks values in output', () => {
-    const result = diffEnvFiles(base, compare);
-    const text = formatDiffText(result);
-    expect(text).not.toContain('http://old.example.com');
-    expect(text).not.toContain('abc123');
+  it('handles comments and blank lines gracefully', () => {
+    const fileA = writeTempEnv('# comment\n\nKEY=val\n');
+    const fileB = writeTempEnv('KEY=val\n');
+    const result = diffEnvFiles(fileA, fileB);
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('unchanged');
   });
-});
 
-describe('formatDiffJson', () => {
-  it('returns valid JSON with summary and changes', () => {
-    const result = diffEnvFiles(base, compare);
-    const json = JSON.parse(formatDiffJson(result));
-    expect(json.summary.added).toBe(1);
-    expect(json.changes).toBeInstanceOf(Array);
-    expect(json.changes.length).toBe(3);
+  it('throws if file A does not exist', () => {
+    expect(() => diffEnvFiles('/nonexistent/.env', '/tmp/.env')).toThrow();
   });
 });

@@ -1,60 +1,44 @@
-import { SchemaField } from '../schema/parser';
+import { loadEnvFile } from '../env/loader';
 
-export type DiffStatus = 'added' | 'removed' | 'changed' | 'unchanged';
+export type DiffStatus = 'changed' | 'unchanged' | 'missing_in_a' | 'missing_in_b';
 
-export interface DiffEntry {
+export interface DiffResult {
   key: string;
   status: DiffStatus;
-  baseValue?: string;
-  compareValue?: string;
-  required?: boolean;
-}
-
-export interface EnvDiffResult {
-  entries: DiffEntry[];
-  addedCount: number;
-  removedCount: number;
-  changedCount: number;
-  unchangedCount: number;
+  valueA: string | undefined;
+  valueB: string | undefined;
 }
 
 /**
- * Compares two env variable maps and returns a structured diff result.
+ * Compares two .env files and returns a list of differences.
+ * @param pathA - Path to the first (base) .env file
+ * @param pathB - Path to the second (target) .env file
  */
-export function diffEnvFiles(
-  base: Record<string, string>,
-  compare: Record<string, string>,
-  schema?: Record<string, SchemaField>
-): EnvDiffResult {
-  const allKeys = new Set([...Object.keys(base), ...Object.keys(compare)]);
-  const entries: DiffEntry[] = [];
+export function diffEnvFiles(pathA: string, pathB: string): DiffResult[] {
+  const envA = loadEnvFile(pathA);
+  const envB = loadEnvFile(pathB);
+
+  const allKeys = new Set([...Object.keys(envA), ...Object.keys(envB)]);
+  const results: DiffResult[] = [];
 
   for (const key of allKeys) {
-    const baseValue = base[key];
-    const compareValue = compare[key];
-    const required = schema?.[key]?.required;
+    const valA = envA[key];
+    const valB = envB[key];
 
     let status: DiffStatus;
-    if (baseValue === undefined) {
-      status = 'added';
-    } else if (compareValue === undefined) {
-      status = 'removed';
-    } else if (baseValue !== compareValue) {
+
+    if (valA === undefined) {
+      status = 'missing_in_a';
+    } else if (valB === undefined) {
+      status = 'missing_in_b';
+    } else if (valA !== valB) {
       status = 'changed';
     } else {
       status = 'unchanged';
     }
 
-    entries.push({ key, status, baseValue, compareValue, required });
+    results.push({ key, status, valueA: valA, valueB: valB });
   }
 
-  entries.sort((a, b) => a.key.localeCompare(b.key));
-
-  return {
-    entries,
-    addedCount: entries.filter((e) => e.status === 'added').length,
-    removedCount: entries.filter((e) => e.status === 'removed').length,
-    changedCount: entries.filter((e) => e.status === 'changed').length,
-    unchangedCount: entries.filter((e) => e.status === 'unchanged').length,
-  };
+  return results.sort((a, b) => a.key.localeCompare(b.key));
 }
