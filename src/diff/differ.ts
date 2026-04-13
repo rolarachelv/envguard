@@ -1,44 +1,57 @@
-import { loadEnvFile } from '../env/loader';
+import * as fs from 'fs';
+import { parseEnvContent } from '../env/loader';
 
-export type DiffStatus = 'changed' | 'unchanged' | 'missing_in_a' | 'missing_in_b';
-
-export interface DiffResult {
+export interface DiffEntry {
   key: string;
-  status: DiffStatus;
-  valueA: string | undefined;
-  valueB: string | undefined;
+  status: 'added' | 'removed' | 'changed' | 'unchanged';
+  oldValue?: string;
+  newValue?: string;
 }
 
-/**
- * Compares two .env files and returns a list of differences.
- * @param pathA - Path to the first (base) .env file
- * @param pathB - Path to the second (target) .env file
- */
-export function diffEnvFiles(pathA: string, pathB: string): DiffResult[] {
-  const envA = loadEnvFile(pathA);
-  const envB = loadEnvFile(pathB);
+export interface DiffResult {
+  baseFile: string;
+  compareFile: string;
+  entries: DiffEntry[];
+  addedCount: number;
+  removedCount: number;
+  changedCount: number;
+  unchangedCount: number;
+}
 
-  const allKeys = new Set([...Object.keys(envA), ...Object.keys(envB)]);
-  const results: DiffResult[] = [];
+export function diffEnvFiles(basePath: string, comparePath: string): DiffResult {
+  const baseContent = fs.readFileSync(basePath, 'utf-8');
+  const compareContent = fs.readFileSync(comparePath, 'utf-8');
+
+  const baseEnv = parseEnvContent(baseContent);
+  const compareEnv = parseEnvContent(compareContent);
+
+  const allKeys = new Set([...Object.keys(baseEnv), ...Object.keys(compareEnv)]);
+  const entries: DiffEntry[] = [];
 
   for (const key of allKeys) {
-    const valA = envA[key];
-    const valB = envB[key];
+    const inBase = key in baseEnv;
+    const inCompare = key in compareEnv;
 
-    let status: DiffStatus;
-
-    if (valA === undefined) {
-      status = 'missing_in_a';
-    } else if (valB === undefined) {
-      status = 'missing_in_b';
-    } else if (valA !== valB) {
-      status = 'changed';
+    if (inBase && !inCompare) {
+      entries.push({ key, status: 'removed', oldValue: baseEnv[key] });
+    } else if (!inBase && inCompare) {
+      entries.push({ key, status: 'added', newValue: compareEnv[key] });
+    } else if (baseEnv[key] !== compareEnv[key]) {
+      entries.push({ key, status: 'changed', oldValue: baseEnv[key], newValue: compareEnv[key] });
     } else {
-      status = 'unchanged';
+      entries.push({ key, status: 'unchanged', oldValue: baseEnv[key], newValue: compareEnv[key] });
     }
-
-    results.push({ key, status, valueA: valA, valueB: valB });
   }
 
-  return results.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => a.key.localeCompare(b.key));
+
+  return {
+    baseFile: basePath,
+    compareFile: comparePath,
+    entries,
+    addedCount: entries.filter(e => e.status === 'added').length,
+    removedCount: entries.filter(e => e.status === 'removed').length,
+    changedCount: entries.filter(e => e.status === 'changed').length,
+    unchangedCount: entries.filter(e => e.status === 'unchanged').length,
+  };
 }
