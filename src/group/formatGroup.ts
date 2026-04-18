@@ -1,34 +1,17 @@
-import type { GroupResult } from './grouper';
-
-function renderGroup(name: string, entries: Record<string, string>): string {
+export function renderGroup(name: string, entries: Record<string, string>): string {
   const lines = [`[${name}]`];
-  for (const [key, value] of Object.entries(entries)) {
-    lines.push(`  ${key}=${value}`);
+  for (const [k, v] of Object.entries(entries)) {
+    lines.push(`  ${k}=${v}`);
   }
   return lines.join('\n');
 }
 
-export function formatGroupText(result: GroupResult): string {
-  const parts: string[] = [];
-
-  for (const [name, entries] of Object.entries(result.groups)) {
-    parts.push(renderGroup(name, entries));
-  }
-
-  if (Object.keys(result.ungrouped).length > 0) {
-    parts.push(renderGroup('(ungrouped)', result.ungrouped));
-  }
-
-  return parts.join('\n\n');
+export function formatGroupText(groups: Record<string, Record<string, string>>): string {
+  const keys = Object.keys(groups);
+  if (keys.length === 0) return 'No groups found.';
+  return keys.map((k) => renderGroup(k, groups[k])).join('\n\n');
 }
 
-export function formatGroupJson(result: GroupResult): string {
-  return JSON.stringify(
-    {
-      groups: result.groups,
-      ungrouped: result.ungrouped,
-    },
-    null,
-    2
-  );
+export function formatGroupJson(groups: Record<string, Record<string, string>>): string {
+  return JSON.stringify({ groups }, null, 2);
 }
