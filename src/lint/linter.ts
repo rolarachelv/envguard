@@ -52,6 +52,24 @@ function lintField(key: string, field: SchemaField, value: string | undefined): 
   return issues;
 }
 
+/**
+ * Returns issues for env keys that are present in the env but not defined in the schema.
+ * These are reported as 'info' since they may be intentional but are worth flagging.
+ */
+function lintUnknownKeys(
+  env: Record<string, string>,
+  schema: EnvSchema
+): LintIssue[] {
+  const knownKeys = new Set(Object.keys(schema.fields));
+  return Object.keys(env)
+    .filter((key) => !knownKeys.has(key))
+    .map((key) => ({
+      key,
+      severity: 'info' as LintSeverity,
+      message: `Key "${key}" is present in env but not defined in schema.`,
+    }));
+}
+
 export function lintEnv(
   env: Record<string, string>,
   schema: EnvSchema
@@ -62,6 +80,8 @@ export function lintEnv(
     const value = env[key];
     issues.push(...lintField(key, field, value));
   }
+
+  issues.push(...lintUnknownKeys(env, schema));
 
   return {
     issues,
