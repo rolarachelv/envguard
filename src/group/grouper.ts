@@ -15,3 +15,21 @@ export function groupEnv(
   }
   return groups;
 }
+
+/**
+ * Returns the sorted list of unique group names present in the given env object.
+ *
+ * @param env - The environment variables to inspect.
+ * @param sep - The separator used to determine group keys (default: '_').
+ * @returns An alphabetically sorted array of group key strings.
+ */
+export function getGroupNames(
+  env: Record<string, string>,
+  sep = '_'
+): string[] {
+  const names = new Set<string>();
+  for (const key of Object.keys(env)) {
+    names.add(getGroupKey(key, sep));
+  }
+  return Array.from(names).sort();
+}
