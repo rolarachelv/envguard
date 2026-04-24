@@ -28,6 +28,16 @@ describe('formatScopeText', () => {
     expect(output).toContain('- DB');
     expect(output).toContain('- REDIS');
   });
+
+  it('does not render available scopes section when scopes not provided', () => {
+    const output = formatScopeText(result);
+    expect(output).not.toContain('Available scopes');
+  });
+
+  it('renders available scopes (0) when empty scopes array provided', () => {
+    const output = formatScopeText(result, []);
+    expect(output).toContain('Available scopes (0)');
+  });
 });
 
 describe('formatScopeJson', () => {
@@ -44,5 +54,11 @@ describe('formatScopeJson', () => {
     const parsed = JSON.parse(output);
     expect(parsed.scopes).toEqual(['DB', 'REDIS']);
     expect(parsed).not.toHaveProperty('scope');
+  });
+
+  it('returns scopes as empty array when empty scopes provided', () => {
+    const output = formatScopeJson(result, []);
+    const parsed = JSON.parse(output);
+    expect(parsed.scopes).toEqual([]);
   });
 });
