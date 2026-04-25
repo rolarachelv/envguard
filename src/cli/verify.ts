@@ -2,6 +2,25 @@ import { Command } from 'commander';
 import { verifyEnv } from '../verify/verifier';
 import { formatVerifyText, formatVerifyJson } from '../verify/formatVerify';
 
+/**
+ * Parses an array of "KEY=VALUE" strings into a record.
+ * Exits the process with an error message if any pair is malformed.
+ */
+function parseExpectedPairs(pairs: string[]): Record<string, string> {
+  const expected: Record<string, string> = {};
+  for (const pair of pairs) {
+    const idx = pair.indexOf('=');
+    if (idx === -1) {
+      console.error(`Invalid pair (expected KEY=VALUE): ${pair}`);
+      process.exit(1);
+    }
+    const key = pair.slice(0, idx);
+    const val = pair.slice(idx + 1);
+    expected[key] = val;
+  }
+  return expected;
+}
+
 export function registerVerifyCommand(program: Command): void {
   program
     .command('verify <envFile>')
@@ -9,18 +28,7 @@ export function registerVerifyCommand(program: Command): void {
     .option('--expect <pairs...>', 'KEY=VALUE pairs to verify')
     .option('--format <fmt>', 'Output format: text or json', 'text')
     .action((envFile: string, opts: { expect?: string[]; format: string }) => {
-      const expected: Record<string, string> = {};
-
-      for (const pair of opts.expect ?? []) {
-        const idx = pair.indexOf('=');
-        if (idx === -1) {
-          console.error(`Invalid pair (expected KEY=VALUE): ${pair}`);
-          process.exit(1);
-        }
-        const key = pair.slice(0, idx);
-        const val = pair.slice(idx + 1);
-        expected[key] = val;
-      }
+      const expected = parseExpectedPairs(opts.expect ?? []);
 
       const report = verifyEnv(envFile, expected);
 
