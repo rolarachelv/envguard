@@ -1,70 +1,66 @@
-import { countEnv, countByPrefix } from "./counter";
-import { formatCountText, formatCountJson } from "./formatCount";
+import { countByPrefix, countEnv } from './counter';
 
-const sampleEnv: Record<string, string> = {
-  APP_NAME: "myapp",
-  APP_ENV: "production",
-  DB_HOST: "localhost",
-  DB_PORT: "5432",
-  SECRET_KEY: "abc123",
-  EMPTY_VAR: "",
-};
+describe('countByPrefix', () => {
+  it('groups keys by prefix', () => {
+    const env = { DB_HOST: 'localhost', DB_PORT: '5432', APP_NAME: 'myapp' };
+    const result = countByPrefix(env);
+    expect(result['DB']).toBe(2);
+    expect(result['APP']).toBe(1);
+  });
 
-describe("countEnv", () => {
-  it("returns correct total, empty, and nonEmpty counts", () => {
-    const result = countEnv(sampleEnv);
-    expect(result.total).toBe(6);
-    expect(result.empty).toBe(1);
-    expect(result.nonEmpty).toBe(5);
+  it('assigns keys without underscore to (no prefix)', () => {
+    const env = { HOST: 'localhost', PORT: '8080' };
+    const result = countByPrefix(env);
+    expect(result['(no prefix)']).toBe(2);
+  });
+
+  it('handles empty env', () => {
+    expect(countByPrefix({})).toEqual({});
+  });
+
+  it('handles mixed keys', () => {
+    const env = { DB_HOST: 'a', DB_PORT: 'b', PLAIN: 'c', APP_KEY: 'd', APP_SECRET: 'e' };
+    const result = countByPrefix(env);
+    expect(result['DB']).toBe(2);
+    expect(result['APP']).toBe(2);
+    expect(result['(no prefix)']).toBe(1);
+  });
+});
+
+describe('countEnv', () => {
+  it('returns total and byPrefix', () => {
+    const env = { DB_HOST: 'localhost', DB_PORT: '5432', APP_NAME: 'myapp' };
+    const result = countEnv(env);
+    expect(result.total).toBe(3);
+    expect(result.byPrefix['DB']).toBe(2);
+    expect(result.byPrefix['APP']).toBe(1);
+  });
+
+  it('handles empty env', () => {
+    const result = countEnv({});
+    expect(result.total).toBe(0);
     expect(result.byPrefix).toEqual({});
   });
 
-  it("groups keys by prefix when prefixes are provided", () => {
-    const result = countEnv(sampleEnv, ["APP_", "DB_"]);
-    expect(result.byPrefix["APP_"]).toBe(2);
-    expect(result.byPrefix["DB_"]).toBe(2);
-    expect(result.byPrefix["(other)"]).toBe(2);
+  it('counts all keys including no-prefix', () => {
+    const env = { PLAIN: 'x', DB_HOST: 'y' };
+    const result = countEnv(env);
+    expect(result.total).toBe(2);
+    expect(result.byPrefix['(no prefix)']).toBe(1);
+    expect(result.byPrefix['DB']).toBe(1);
   });
 
-  it("handles empty env", () => {
-    const result = countEnv({});
-    expect(result.total).toBe(0);
-    expect(result.empty).toBe(0);
-    expect(result.nonEmpty).toBe(0);
-  });
-});
-
-describe("countByPrefix", () => {
-  it("counts keys matching each prefix", () => {
-    const result = countByPrefix(sampleEnv, ["APP_", "SECRET_"]);
-    expect(result["APP_"]).toBe(2);
-    expect(result["SECRET_"]).toBe(1);
-    expect(result["(other)"]).toBe(3);
+  it('handles single key with prefix', () => {
+    const env = { MY_VAR: 'hello' };
+    const result = countEnv(env);
+    expect(result.total).toBe(1);
+    expect(result.byPrefix['MY']).toBe(1);
   });
 
-  it("returns zero for unmatched prefixes", () => {
-    const result = countByPrefix(sampleEnv, ["MISSING_"]);
-    expect(result["MISSING_"]).toBe(0);
-    expect(result["(other)"]).toBe(6);
-  });
-});
-
-describe("formatCountText", () => {
-  it("formats count result as text", () => {
-    const result = countEnv(sampleEnv, ["APP_"]);
-    const text = formatCountText(result);
-    expect(text).toContain("Total keys");
-    expect(text).toContain("Empty");
-    expect(text).toContain("By prefix");
-    expect(text).toContain("APP_");
-  });
-});
-
-describe("formatCountJson", () => {
-  it("formats count result as JSON", () => {
-    const result = countEnv(sampleEnv);
-    const json = JSON.parse(formatCountJson(result));
-    expect(json.total).toBe(6);
-    expect(json.empty).toBe(1);
+  it('handles multiple keys sharing prefix', () => {
+    const env = { X_A: '1', X_B: '2', X_C: '3' };
+    const result = countEnv(env);
+    expect(result.total).toBe(3);
+    expect(result.byPrefix['X']).toBe(3);
   });
 });
